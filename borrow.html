@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Borrow Book - BraveKeeper</title>
+  <link rel="stylesheet" type="text/css" href="borrow.css">
+    <link rel="icon" type="image/png" href="Bravekeeper.png" >
+  <style>
+    body { font-family: Arial, sans-serif; background:#f2f2f2; margin:0; padding:0;}
+    .video-background { position:fixed; top:0; left:0; width:100%; height:100%; z-index:-1; overflow:hidden; }
+    .video-background video { width:100%; height:100%; object-fit:cover; }
+    .card { background: rgba(255, 255, 255, 0.363); max-width:600px; margin:50px auto; padding:20px; border-radius:12px; box-shadow:0 4px 15px rgba(0,0,0,0.2);}
+    h2 { text-align:center; color:#13007d; }
+    label { display:block; margin-top:12px; font-weight:bold; }
+    input, textarea { width:100%; padding:8px; margin-top:4px; border-radius:6px; border:1px solid #ccc; }
+    .row { display:flex; gap:10px; }
+    .row > div { flex:1; }
+    button { padding:12px 20px; margin-top:15px; border:none; border-radius:8px; background:#13007d; color:white; font-weight:bold; cursor:pointer; }
+    button:disabled { background: #555; cursor: not-allowed; }
+    .camera-container { margin-top:15px; text-align:center; }
+    #snapshot { display:none; }
+    .preview img { max-width:220px; border:3px solid #13007d; border-radius:8px; margin-top:10px; }
+    #summary { text-align:left; margin-top:20px; }
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #13007d;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      vertical-align: middle;
+      margin-left: 10px;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<div class="video-background">
+  <video autoplay muted loop playsinline>
+    <source src="[walapa].mp4" type="video/mp4">
+  </video>
+</div>
+
+<div class="card">
+  <button id="backBtn">&larr; Back</button>
+  <h2>Multiversity E-Library: Borrow Form</h2>
+  <p class="note">Fill in the fields and scan the QR attached to the book.</p>
+
+  <form id="borrowForm">
+    <label for="email">First Asia Email</label>
+    <input id="email" name="email" type="email" placeholder="s20xxxxxxxx@firstasia.edu.ph" required />
+
+    <div class="row">
+      <div>
+        <label for="institution">Institution</label>
+        <input id="institution" name="institution" type="text" placeholder="TS, FCS, IB, or FSH only." required />
+      </div>
+    </div>
+
+      <div class="row">
+      <div>
+        <label for="date">Date and Time Borrowed (Petsa at Oras Hiniram?)</label>
+        <input id="date" name="date" type="datetime-local" required />
+      </div>
+    </div>
+      
+      <div class="row">
+      <div>
+        <label for="why">Reason For Borrowing (Bakit Hiniram?)</label>
+        <input id="why" name="why" type="text" placeholder="Ex: Thesis, Research, etc." />
+      </div>
+
+          <br>
+          
+          <div>
+        <label for="bookName">Book Being Borrowed (Librong Hiniram?)</label>
+        <input id="bookName" name="bookName" type="text" placeholder="Required" required />
+      </div>
+    </div>
+
+    <label for="otherw">Book Type (Uri ng Libro?)</label>
+    <textarea id="otherw" name="otherw" rows="3" placeholder="Optional">
+    </textarea>
+
+      <br>
+
+<p> An email containing transcript of the details you have filled up and the date you shall return the book.</p>
+      
+      <form>
+          
+  <fieldset>
+    <legend> Do you agree to these terms?</legend>
+    
+    <input type="radio" id="choice-yes" name="agreement" value="yes" required>
+    <label for="choice-yes">Yes</label>
+    
+    <input type="radio" id="choice-no" name="agreement" value="no">
+    <label for="choice-no">No</label>
+  </fieldset>
+          
+</form>
+
+      
+    <div class="camera-container">
+      <video id="camera" autoplay playsinline></video>
+    </div>
+
+    <hr>
+
+<label for="locker">Scan the Book's QR here.</label>
+      
+    <!-- New Camera Buttons -->
+    <div style="display:flex; gap:10px; justify-content:center; margin-top:10px;">
+        <button type="button" id="takePic">Scan QR</button>
+      <button type="button" id="switchCam">Switch Camera</button>
+      <input type="file" id="galleryInput" accept="image/*" style="display:none;">
+    </div>
+      
+    <canvas id="snapshot"></canvas>
+    <input type="hidden" id="photo_base64" name="photo_base64">
+    <div class="preview" id="preview"></div>
+
+      <div>
+          <button type="submit">Reset Form</button>
+      </div>
+
+      <button type="submit">Submit Form</button>
+  </form>
+
+  <div id="summary" style="display:none;"></div>
+
+  <div style="display:flex; justify-content:center; gap:15px; margin-top:10px;">
+    <button id="submitAgain" style="display:none;">Submit Another Form</button>
+    <button id="viewReports" style="display:none;">View Archieve</button>
+  </div>
+</div>
+
+<script>
+const form = document.getElementById('borrowForm');
+const camera = document.getElementById('camera');
+const takePic = document.getElementById('takePic');
+const snapshot = document.getElementById('snapshot');
+const preview = document.getElementById('preview');
+const photoBase64Input = document.getElementById('photo_base64');
+const summary = document.getElementById('summary');
+const submitAgain = document.getElementById('submitAgain');
+const viewReports = document.getElementById('viewReports');
+const backBtn = document.getElementById('backBtn');
+
+// Back button
+backBtn.addEventListener('click', () => window.history.back());
+
+// Camera with switch front/back
+let currentFacingMode = "environment";
+let currentStream = null;
+
+// Start camera function
+function startCamera() {
+  if (currentStream) {
+    currentStream.getTracks().forEach(track => track.stop());
+  }
+
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: currentFacingMode }
+  })
+  .then(stream => {
+    currentStream = stream;
+    camera.srcObject = stream;
+
+    // Invert for front camera
+    camera.style.transform = currentFacingMode === "user"
+      ? "scaleX(-1)"
+      : "scaleX(1)";
+  })
+  .catch(err => console.error("Camera error:", err));
+}
+
+// Initial camera load
+startCamera();
+
+// Switch camera
+document.getElementById("switchCam").addEventListener("click", () => {
+  currentFacingMode = currentFacingMode === "environment" ? "user" : "environment";
+  startCamera();
+});
+
+// Take picture (handles inversion)
+takePic.addEventListener("click", () => {
+  const ctx = snapshot.getContext("2d");
+  snapshot.width = camera.videoWidth;
+  snapshot.height = camera.videoHeight;
+
+  if (currentFacingMode === "user") {
+    ctx.translate(snapshot.width, 0);
+    ctx.scale(-1, 1);
+  }
+
+  ctx.drawImage(camera, 0, 0);
+  const dataUrl = snapshot.toDataURL("image/png");
+  photoBase64Input.value = dataUrl;
+  preview.innerHTML = `<img src="${dataUrl}">`;
+});
+
+// Gallery upload
+const galleryInput = document.getElementById("galleryInput");
+document.getElementById("openGallery").addEventListener("click", () => {
+  galleryInput.click();
+});
+
+galleryInput.addEventListener("change", () => {
+  const file = galleryInput.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      snapshot.width = img.width;
+      snapshot.height = img.height;
+      const ctx = snapshot.getContext("2d");
+
+      // Invert gallery image
+      ctx.translate(snapshot.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, 0, 0);
+
+      const dataUrl = snapshot.toDataURL("image/png");
+      photoBase64Input.value = dataUrl;
+      preview.innerHTML = `<img src="${dataUrl}">`;
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+// Submit to Google Sheets
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+
+  const submitButton = form.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+
+  const spinner = document.createElement('span');
+  spinner.classList.add('spinner');
+  submitButton.textContent = "Sending...";
+  submitButton.appendChild(spinner);
+
+  const fd = new FormData(form);
+  const report = {};
+  ['email','what','when','where','who','otherw','description','photo_base64'].forEach(k => {
+    report[k] = fd.get(k) || '';
+  });
+
+  fetch("https://script.google.com/macros/s/AKfycbwKIAvVYK2Ut6bAf5D7btj6gBXMHWTi_-HJ9BM51_MnK5bJ1gqZinHOSokKhmkUoFjh/exec", {
+    method: "POST",
+    body: new URLSearchParams(report)
+  })
+  .then(resp => resp.text())
+  .then(data => {
+    console.log(data);
+    form.style.display = 'none';
+    preview.innerHTML = '';
+    summary.style.display = 'block';
+    summary.innerHTML = "<h2>Report Summary</h2><ul>" +
+      Object.keys(report).map(k => {
+        if(k === 'photo_base64') return `<li><strong>Photo:</strong><br><img src="${report[k]}" style="max-width:300px;border:2px solid #13007d;border-radius:8px;"></li>`;
+        else return `<li><strong>${k}:</strong> ${report[k]}</li>`;
+      }).join('') +
+      "</ul><p style='color:green;font-weight:bold;'>Report sent. Thank you!</p>";
+
+    submitAgain.style.display = 'inline-block';
+    viewReports.style.display = 'inline-block';
+  })
+  .catch(err => {
+    alert("Error sending report: " + err);
+    submitButton.disabled = false;
+    submitButton.textContent = "Send Report";
+  });
+});
+
+// Buttons behavior
+submitAgain.addEventListener('click', () => window.location.reload());
+viewReports.addEventListener('click', () => window.location.href = 'lostreport.html');
+</script>
+
+</body>
+</html>
